@@ -9,30 +9,17 @@ err() {
 
 default_iter_count=1000000;
 usage() {
-	err "Usage: $0 outfile [infile]";
+	err "Usage: $0 infile outfile";
 	err "WARNING: this script will not defend you against tampered files, only accidental corruption!";
 	err "outfile, outfile.iv.txt, outfile.iter.txt, and outfile.sha256 will be created.";
 	err "None of these files must already exist - a clean directory is advised.";
-	err "If infile is not specified, it defaults to stdin.";
 	err "Environment variables:";
 	err "* iter_count: controls pbkdf2 iteration count, default $default_iter_count";
 	exit 1;
 }
 
-
-
-# handle stdin vs infile argument.
-keep_stdin=false;
-src="";
-if test "$#" -lt 1; then usage; fi;
-if test "$#" -eq 1; then {
-	# file should be already opened as stdin,
-	# so just let exec'ing openssl handle that later.
-	keep_stdin=true;
-}; else {
-	if test "$#" -gt 2; then usage; fi;
-	src="$2";
-}; fi;
+if test "$#" -ne 2; then usage; fi;
+src="$1";
 
 
 
@@ -40,7 +27,7 @@ if test "$#" -eq 1; then {
 # as these bits are kept in separate files,
 # we want to avoid overwriting some but not others,
 # which would render a previous encryption corrupt if any settings differ.
-outfile="$1";
+outfile="$2";
 ivfile="${outfile}.iv.txt";
 iterfile="${outfile}.iter.txt";
 checksumfile="${outfile}.sha256";
@@ -98,11 +85,7 @@ do_encrypt() {
 	show_exec openssl enc -aes-256-ctr -iv "$bytes" -pbkdf2 -iter "$iter_count" -out "$outfile" "$@";
 };
 
-if $keep_stdin; then {
-	do_encrypt;
-}; else {
-	do_encrypt -in "$src";
-}; fi;
+do_encrypt -in "$src";
 
 
 
