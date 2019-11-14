@@ -15,6 +15,8 @@ usage() {
 	err "None of these files must already exist - a clean directory is advised.";
 	err "Environment variables:";
 	err "* iter_count: controls pbkdf2 iteration count, default $default_iter_count";
+	err "* pass_src: passed to openssl's -pass option if set, see openssl(1) for details.";
+	err "  (Please note that pass:<password> can still be visible in ps output when openssl is called!)";
 	exit 1;
 }
 
@@ -76,16 +78,32 @@ set -u;
 
 
 
+# pass phrase argument for openssl: similar sort of song and dance as above.
+use_pass_src=true;
+set +u;
+if test -z "$pass_src"; then {
+	# shut up shellcheck even though we won't use it in this case.
+	pass_src="";
+	use_pass_src=false;
+}; fi;
+set -u;
+
+
+
 # now we just encrypt more or less as normal...
 show_exec() {
 	err "exec:" "$@";
 	"$@";
 };
 do_encrypt() {
-	show_exec openssl enc -aes-256-ctr -iv "$bytes" -pbkdf2 -iter "$iter_count" -out "$outfile" "$@";
+	show_exec openssl enc -aes-256-ctr -iv "$bytes" -pbkdf2 -iter "$iter_count" -in "$src" -out "$outfile" "$@";
 };
 
-do_encrypt -in "$src";
+if $use_pass_src; then {
+	do_encrypt -pass "$pass_src";
+}; else {
+	do_encrypt;
+}; fi;
 
 
 
