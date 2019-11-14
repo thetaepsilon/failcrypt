@@ -1,0 +1,127 @@
+#!/bin/bash
+# curse you, posix, and your lack of decent pipelining error support!
+# also look ma, no exit $? needed because of set -e
+set -euo pipefail;
+
+err() {
+	echo "#" "$@" >&2;
+}
+
+default_iter_count=1000000;
+usage() {
+	err "Usage: $0 outfile [infile]";
+	err "WARNING: this script will not defend you against tampered files, only accidental corruption!";
+	err "outfile, outfile.iv.txt, outfile.iter.txt, and outfile.sha256 will be created.";
+	err "None of these files must already exist - a clean directory is advised.";
+	err "If infile is not specified, it defaults to stdin.";
+	err "Environment variables:";
+	err "* iter_count: controls pbkdf2 iteration count, default $default_iter_count";
+	exit 1;
+}
+
+
+
+# handle stdin vs infile argument.
+keep_stdin=false;
+src="";
+if test "$#" -lt 1; then usage; fi;
+if test "$#" -eq 1; then {
+	# file should be already opened as stdin,
+	# so just let exec'ing openssl handle that later.
+	keep_stdin=true;
+}; else {
+	if test "$#" -gt 2; then usage; fi;
+	src="$2";
+}; fi;
+
+
+
+# The rationale for refusing an overwrite:
+# as these bits are kept in separate files,
+# we want to avoid overwriting some but not others,
+# which would render a previous encryption corrupt if any settings differ.
+outfile="$1";
+ivfile="${outfile}.iv.txt";
+iterfile="${outfile}.iter.txt";
+checksumfile="${outfile}.sha256";
+nope() {
+	if test -e "$1"; then {
+		err "$1 already exists, refusing to overwrite. please use a clean directory.";
+		exit 2;
+	}; fi;
+};
+nope "$outfile";
+nope "$ivfile";
+nope "$iterfile";
+nope "$checksumfile";
+
+
+
+# IV generation: this doesn't have to be kept secret,
+# but openssl's derivation of it from the password has been considered suspect.
+# Therefore we can just make it a random one just to be sure.
+# How to work out the size of IV:
+# for CTR mode, it's the block size of the cipher.
+# AES-256 has a 128-bit block size (not the same as the key size!).
+bytes="$(dd if=/dev/urandom bs=16 count=1 status=none | od -An -tx1 | tr -d ' \n')";
+
+exec 3>"$ivfile";
+# extra sanity check on the other side, all lines should remain the same.
+echo "$bytes" >&3;
+echo "$bytes" >&3;
+echo "$bytes" >&3;
+echo "$bytes" >&3;
+echo "$bytes" >&3;
+exec 3>&-;
+
+
+
+# iteration count setup:
+# we need to test for a potentially unset variable, so be careful for a moment...
+
+set +u;
+if test -z "$iter_count"; then iter_count=$default_iter_count; fi;
+set -u;
+# we don't write away the iteration count just yet until openssl enc finishes.
+# if it fails, that's either because a) iter_count wasn't a number,
+# or b) some other failure occurs in which case we don't write it on purpose,
+# to increase the likelyhood that decryption will fail on a buggered encryption.
+
+
+
+# now we just encrypt more or less as normal...
+show_exec() {
+	err "exec:" "$@";
+	"$@";
+};
+do_encrypt() {
+	show_exec openssl enc -aes-256-ctr -iv "$bytes" -pbkdf2 -iter "$iter_count" -out "$outfile" "$@";
+};
+
+if $keep_stdin; then {
+	do_encrypt;
+}; else {
+	do_encrypt -in "$src";
+}; fi;
+
+
+
+# then write away the iteration count when we know everything works (see above)
+exec 3>"${outfile}.iter.txt";
+echo "$iter_count" >&3;
+echo "$iter_count" >&3;
+echo "$iter_count" >&3;
+echo "$iter_count" >&3;
+echo "$iter_count" >&3;
+exec 3>&-;
+
+
+
+# and finally, hash the *encrypted* data, if only to check against accidental corruption.
+# NB: NEVER EVER hash the plaintext!
+# if by the off chance two plaintexts are the same and the passphrase is the same,
+# you're probably opening yourself up to a world of hurt cryptoanalysis wise.
+# (assuming they can't also plant altered encrypted files back; please see the warning in the usage)
+sha256sum < "$outfile" > "$checksumfile";
+
+
