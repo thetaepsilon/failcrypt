@@ -1,0 +1,28 @@
+#!/bin/sh
+# welp look this time I can sorta write in portable shell...
+# but now I have to put || exit $? everywhere!
+
+err() {
+	echo "#" "$@" >&2;
+};
+
+usage() {
+	err "Usage: $0 infile";
+	err "infile, infile.sha256, infile.iv.txt and infile.iter.txt are required.";
+	err "decrypted file is written to stdout.";
+	exit 1;
+};
+
+if test $# -ne 1; then usage; fi;
+infile="$1";
+
+# the encryption always pipes stuff to sha256sum so that the "file" is always "-".
+# this allows the checksum file to be more conveniently renamed.
+# so we have to do the same here when verifying.
+sha256sum --quiet -c "${infile}.sha256" < "$infile" || exit $?;
+
+err "SHA256 verify completed successfully, starting decrypt...";
+
+# execute remainder (can be called separately if verification isn't desired)
+exec failcrypt_decrypt_noverify "$infile";
+
