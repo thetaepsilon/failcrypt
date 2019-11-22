@@ -11,6 +11,9 @@ usage() {
 	err "infile, infile.sha256, infile.iv.txt and infile.iter.txt are required.";
 	err "decrypted file is written to stdout.";
 	err "WARNING: no checks can be made that the input password source is correct!";
+	err "Environment variables:";
+	err "* pass_src: passed to openssl's -pass option if set, see openssl(1) for details.";
+	err "  (Please note that pass:<password> can still be visible in ps output when openssl is called!)";
 	exit 1;
 };
 
