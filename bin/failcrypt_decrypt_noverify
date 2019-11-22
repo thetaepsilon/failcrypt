@@ -1,0 +1,52 @@
+#!/usr/bin/env lua5.3
+
+local infile = ...
+if not infile then
+	error("Usage: failcrypt_decrypt_noverify infile")
+end
+
+local ivfile = infile .. ".iv.txt"
+local iterfile = infile .. ".iter.txt"
+
+-- reads one of the above files which is expected to consist solely of identical lines.
+local readline = function(f, label)
+	local count = 0
+	local dedup = nil
+	for line in f:lines() do
+		if not dedup then
+			dedup = line
+		else
+			if dedup ~= line then
+				error("lines don't match in " .. label .. ", possible corruption. aborting.")
+			end
+		end
+		count = count + 1
+	end
+	assert(count >= 5, "not enough lines to ensure integrity in " .. label)
+	return dedup
+end
+local readfile = function(path)
+	local handle = assert(io.open(path))
+	local line = readline(handle, path)
+	handle:close()
+	return line
+end
+
+
+local iv = readfile(ivfile)
+local iter = readfile(iterfile)
+assert(tonumber(iter), "iterations count doesn't appear to be a number? " .. iter)
+
+-- hmm, shell escapes get a bit hairy here...
+local cmd =
+	"openssl enc -d -aes-256-ctr -pbkdf2 -in \"" .. infile .. "\" -iter " ..
+	iter .. " -iv \"" .. iv .. "\""
+
+local pass = os.getenv("pass_src")
+if pass then
+	cmd = cmd .. " -pass \"" .. pass .. "\""
+end
+
+io.stderr:write("# cmd: " .. cmd .. "\n")
+local success, state, num = os.execute(cmd)
+
