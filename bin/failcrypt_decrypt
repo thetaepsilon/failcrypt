@@ -10,6 +10,7 @@ usage() {
 	err "Usage: $0 infile";
 	err "infile, infile.sha256, infile.iv.txt and infile.iter.txt are required.";
 	err "decrypted file is written to stdout.";
+	err "WARNING: no checks can be made that the input password source is correct!";
 	exit 1;
 };
 
