@@ -49,4 +49,10 @@ end
 
 io.stderr:write("# cmd: " .. cmd .. "\n")
 local success, state, num = os.execute(cmd)
+if not success then
+	-- newline in case something happened while openssl displays a prompt
+	-- (otherwise we may end up on the same line, not as readable)
+	io.stderr:write("\n")
+	error("openssl died unexpectedly: " .. state .. " " .. num)
+end
 
